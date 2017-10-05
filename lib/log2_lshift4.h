@@ -2,24 +2,25 @@
 
 /*
  * Precalculated log2 values for 0 - 8193 range
- * return shifted to left for 4 bit,
- * for improve precision without float poing
+ * return data shifted to left for 4 bit,
+ * for improve precision without float point.
  *
- * Used in shannon entropy for heuristic
+ * Used only in shannon entropy for heuristic
+ *
+ * Only first 128 elements precalculated for save memory
  */
-
 #define LOG2_RET_SHIFT (1 << 4)
 
-static int log2_lshift16(uint16_t x)
+static int log2_lshift4(uint16_t x)
 {
 	/*
-	 * Predefined array for first 256 values
+	 * Predefined array for first 128 values
 	 * Python generator example
 	 * import math
-	 * for i in range(1, 256):
+	 * for i in range(1, 128):
 	 *     print(int(math.log2(i)*16),end=', ')
 	 */
-	uint8_t ret[256] = {
+	uint8_t ret[128] = {
 		0,    0,    16,   25,   32,   37,   41,   44,   48,   50,
 		53,   55,   57,   59,   60,   62,   64,   65,   66,   67,
 		69,   70,   71,   72,   73,   74,   75,   76,   76,   77,
@@ -32,27 +33,48 @@ static int log2_lshift16(uint16_t x)
 		103,  104,  104,  104,  104,  105,  105,  105,  105,  106,
 		106,  106,  106,  106,  107,  107,  107,  107,  108,  108,
 		108,  108,  108,  109,  109,  109,  109,  109,  110,  110,
-		110,  110,  110,  111,  111,  111,  111,  111,  112,  112,
-		112,  112,  112,  112,  113,  113,  113,  113,  113,  113,
-		114,  114,  114,  114,  114,  114,  115,  115,  115,  115,
-		115,  115,  115,  116,  116,  116,  116,  116,  116,  117,
-		117,  117,  117,  117,  117,  117,  118,  118,  118,  118,
-		118,  118,  118,  118,  119,  119,  119,  119,  119,  119,
-		119,  119,  120,  120,  120,  120,  120,  120,  120,  120,
-		121,  121,  121,  121,  121,  121,  121,  121,  122,  122,
-		122,  122,  122,  122,  122,  122,  122,  123,  123,  123,
-		123,  123,  123,  123,  123,  123,  124,  124,  124,  124,
-		124,  124,  124,  124,  124,  125,  125,  125,  125,  125,
-		125,  125,  125,  125,  125,  126,  126,  126,  126,  126,
-		126,  126,  126,  126,  126,  126,  127,  127,  127,  127,
-		127,  127,  127,  127,  127,  127
+		110,  110,  110,  111,  111,  111,  111,  111
 
 	};
 
-	if (x < 256)
+
+	if (x < 128)
 		return ret[x];
 
 	if (x < 1024) {
+		if (x < 256) {
+			if (x < 134)
+				return 112;
+			if (x < 140)
+				return 113;
+			if (x < 146)
+				return 114;
+			if (x < 153)
+				return 115;
+			if (x < 159)
+				return 116;
+			if (x < 166)
+				return 117;
+			if (x < 174)
+				return 118;
+			if (x < 182)
+				return 119;
+			if (x < 190)
+				return 120;
+			if (x < 198)
+				return 121;
+			if (x < 207)
+				return 122;
+			if (x < 216)
+				return 123;
+			if (x < 225)
+				return 124;
+			if (x < 235)
+				return 125;
+			if (x < 246)
+				return 126;
+			return 127;
+		}
 		if (x < 470) {
 			if (x < 268)
 				return 128;

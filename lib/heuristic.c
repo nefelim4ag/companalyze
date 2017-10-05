@@ -6,46 +6,39 @@
 
 #include "sort.h"
 #include "heuristic.h"
-#include "log2_lshift16.h"
+#include "log2_lshift4.h"
 
-static uint32_t count_pairs(struct heuristic_ws *ws, uint32_t start)
-{
-	uint32_t i;
-	uint32_t pairs_count = 0;
-	uint8_t pairs[2];
-	uint8_t *addr;
 
-	pairs[0] = ws->bucket[start].symbol;
-	pairs[1] = ws->bucket[start+1].symbol;
-
-	for (i = 0; i < ws->sample_size-1; i += 1 + addr - ws->sample) {
-		addr = (uint8_t *) memchr(ws->sample+i, pairs[0], ws->sample_size-i-1);
-		if (addr == NULL)
-			break;
-		if (ws->sample[i] == pairs[1])
-			pairs_count++;
-	}
-
-	for (i = 0; i < ws->sample_size-1; i += 1 + addr - ws->sample) {
-		addr = (uint8_t *) memchr(ws->sample+i, pairs[1], ws->sample_size-i-1);
-		if (addr == NULL)
-			break;
-		if (ws->sample[i] & pairs[0])
-			pairs_count++;
-	}
-
-	return pairs_count;
-}
+/* I think that not working as expected */
 
 /* Pair distance from random distribution */
 static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t coreset_size)
 {
-	uint32_t i, pairs_count;
 	uint64_t sum = 0;
 	int64_t buf[2];
+	uint32_t i, i2;
+	uint16_t pairs_count;
+	uint8_t  pairs[2];
+	uint8_t *sample = ws->sample;
 
-	for (i = 0; i < coreset_size-1; i++) {
-		pairs_count = count_pairs(ws, i);
+	for (i = 0; i < coreset_size-1; i += 1) {
+		pairs[0] = ws->bucket[i+0].symbol;
+		pairs[1] = ws->bucket[i+1].symbol;
+
+		pairs_count = 0;
+		/*
+		 * Search: ab, ba, bc, cb, cd, dc... pairs
+		 */
+		for (i2 = 0; i2 < ws->sample_size - 1; i2++) {
+			if (sample[i2] == pairs[0] && sample[i2 + 1] == pairs[1]) {
+				pairs_count++;
+				continue;
+			}
+			if (sample[i2] == pairs[1] && sample[i2 + 1] == pairs[0]) {
+				pairs_count++;
+				continue;
+			}
+		}
 
 		buf[0] = ws->bucket[i].count * ws->bucket[i+1].count;
 		buf[0] = buf[0] << 17;
@@ -57,28 +50,46 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 		sum += (buf[0] - buf[1])*(buf[0] - buf[1]);
 	}
 
-	return sum >> 10;
+	return sum >> 13;
 }
 
 /*
  * Shannon Entropy calculation
- * return % of maximum entropy
- * <70 -> try compress data
- * <90 -> try additional checks
- * >90 -> don't compress
+ *
+ * Pure byte distribution analyze fail to determine
+ * compressiability of data. Try calculate entropy to
+ * estimate the average minimum number of bits needed
+ * to encode a sample data.
+ *
+ * For comfort, use return of percentage of needed bit's,
+ * instead of bit's amaount directly.
+ *
+ * In theory if heuristic hit that check,
+ * then heuristic returns OK only compression,
+ * with Huffman coding
+ *
+ * @ENTROPY_LVL_ACEPTABLE - below that threshold sample has low byte
+ * entropy and can be compressible with high probability
+ *
+ * @ENTROPY_LVL_HIGH - data are not compressible with high probability,
+ * if that not possible to get additional analyze, use that threshold
+ * to restrict compression of data.
  */
 
-static uint32_t shannon_entropy_perc(struct heuristic_ws *ws)
+#define ENTROPY_LVL_ACEPTABLE 70
+#define ENTROPY_LVL_HIGH 85
+
+static uint32_t shannon_entropy(struct heuristic_ws *ws)
 {
 	int64_t entropy_max = 8*LOG2_RET_SHIFT;
 	uint64_t p, q, entropy_sum;
 	uint32_t i;
 
-	q = log2_lshift16(ws->sample_size);
+	q = log2_lshift4(ws->sample_size);
 	entropy_sum = 0;
 	for (i = 0; i < BUCKET_SIZE && ws->bucket[i].count > 0; i++) {
 		p = ws->bucket[i].count;
-		entropy_sum += p*(q-log2_lshift16(p));
+		entropy_sum += p*(q-log2_lshift4(p));
 	}
 
 	entropy_sum /= ws->sample_size;
@@ -190,6 +201,7 @@ static int sample_repeated_patterns(struct heuristic_ws *ws)
 static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 {
 	long unsigned i, curr_sample_pos;
+	int ret = 0;
 	struct heuristic_ws workspace;
 	uint32_t byte_set = 0;
 	uint32_t byte_core_set = 0;
@@ -208,6 +220,8 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 	workspace.sample_size = curr_sample_pos;
 
 	int reppat = sample_repeated_patterns(&workspace);
+	if (reppat)
+		ret = 1;
 
 	memset(workspace.bucket, 0, sizeof(*workspace.bucket)*BUCKET_SIZE);
 
@@ -220,15 +234,46 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 	}
 
 	byte_set = byte_set_size(&workspace);
+	if (byte_set < BYTE_SET_THRESHOLD && ret == 0)
+		ret = 2;
 
 	byte_core_set = byte_core_set_size(&workspace);
+	if (byte_core_set < BYTE_CORE_SET_LOW && ret == 0)
+		ret = 3;
 
-	shannon_e_i = shannon_entropy_perc(&workspace);
+	if (byte_core_set > BYTE_CORE_SET_HIGH && ret == 0)
+		ret = -3;
+
+	shannon_e_i = shannon_entropy(&workspace);
 	shannon_e_f = shannon_f(&workspace);
 
 	rnd_distribution_dist = random_distribution_distance(&workspace, byte_core_set);
 
-	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u, RndDist: %5u\n", byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, rnd_distribution_dist);
+	if (shannon_e_i < ENTROPY_LVL_ACEPTABLE && ret == 0)
+		ret = 4;
+	else {
+		if (shannon_e_i < ENTROPY_LVL_HIGH) {
+			if (rnd_distribution_dist > 2) {
+				if (ret == 0)
+					ret = 5;
+			} else {
+				if (ret == 0)
+					ret = 0;
+			}
+		} else {
+			if (rnd_distribution_dist > 20) {
+				if (ret == 0)
+					ret = 6;
+			} else {
+				if (ret == 0)
+					ret = 0;
+			}
+		}
+	}
+
+
+	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u, RndDist: %5u, out: %i\n",
+		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, rnd_distribution_dist, ret);
 
 	free(workspace.sample);
 	free(workspace.bucket);

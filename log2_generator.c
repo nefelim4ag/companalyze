@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "lib/log2_lshift16.h"
+#include "lib/log2_lshift4.h"
 
 /*
  * Btrfs use 128Kb max block max_input_size for compress data
@@ -23,7 +23,7 @@ int main(int argc, char *argv[]){
 	uint32_t i;
 	uint32_t fraction_old = 0;
 	if (gen) {
-		printf("#include \"log2_lshift16.h\"\n\n");
+		printf("#include \"log2_lshift4.h\"\n\n");
 		printf("/*\n");
 		printf(" * Precalculated log2 values\n");
 		printf(" * Shifting used for avoiding floating point\n");
@@ -48,13 +48,13 @@ int main(int argc, char *argv[]){
 		printf("\treturn 0;\n");
 		printf("}\n");
 	} else {
-		printf("fraction fraction log2() == log2_lshift16()\n");
+		printf("fraction fraction log2() == log2_lshift4()\n");
 		for (i = 1; i < max_input_size; i++) {
 			double fraction = (double) i;
 			int32_t new_log_val = log2(fraction)*log_return_mpl;
 			if (old_log_val != new_log_val) {
 				old_log_val = new_log_val;
-				printf("%6i %f %4i == %4i\n", i, fraction, new_log_val, log2_lshift16(fraction));
+				printf("%6i %f %4i == %4i\n", i, fraction, new_log_val, log2_lshift4(fraction));
 				if (old_log_val == 0)
 					break;
 			}
