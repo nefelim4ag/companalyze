@@ -76,6 +76,16 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
  * to restrict compression of data.
  */
 
+/* Ex. of ilog2 */
+static int ilog2(uint64_t v)
+{
+	int l = 0;
+	v = v*v*v*v;
+	while ((1UL << l) < v)
+		l++;
+	return l;
+}
+
 #define ENTROPY_LVL_ACEPTABLE 70
 #define ENTROPY_LVL_HIGH 85
 
@@ -85,7 +95,8 @@ static uint32_t shannon_entropy(struct heuristic_ws *ws)
 	uint64_t p, q, entropy_sum;
 	uint32_t i;
 
-	q = log2_lshift4(ws->sample_size);
+	q = ws->sample_size;
+	q = log2_lshift4(q);
 	entropy_sum = 0;
 	for (i = 0; i < BUCKET_SIZE && ws->bucket[i].count > 0; i++) {
 		p = ws->bucket[i].count;
@@ -207,6 +218,7 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 	uint32_t byte_core_set = 0;
 	uint32_t shannon_e_i = 0, shannon_e_f = 0;
 	uint32_t rnd_distribution_dist = 0;
+	float error = 0;
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
 	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
@@ -247,7 +259,10 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 	shannon_e_i = shannon_entropy(&workspace);
 	shannon_e_f = shannon_f(&workspace);
 
-	rnd_distribution_dist = random_distribution_distance(&workspace, byte_core_set);
+	if (shannon_e_f > 0)
+		error = 100 - (shannon_e_i * 1.0 * 100 / (shannon_e_f));
+
+//	rnd_distribution_dist = random_distribution_distance(&workspace, byte_core_set);
 
 	if (shannon_e_i < ENTROPY_LVL_ACEPTABLE && ret == 0)
 		ret = 4;
@@ -272,8 +287,8 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 	}
 
 
-	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u, RndDist: %5u, out: %i\n",
-		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, rnd_distribution_dist, ret);
+	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u ~%3.1f%%, RndDist: %5u, out: %i\n",
+		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, error, rnd_distribution_dist, ret);
 
 	free(workspace.sample);
 	free(workspace.bucket);
