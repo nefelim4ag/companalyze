@@ -88,7 +88,7 @@ static int ilog2(uint64_t v)
 #define ENTROPY_LVL_ACEPTABLE 70
 #define ENTROPY_LVL_HIGH 85
 
-static uint32_t ilog2_w(uint32_t num)
+static uint32_t ilog2_w(uint64_t num)
 {
 	const int ch = 1;
 	switch (ch) {
