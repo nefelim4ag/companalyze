@@ -20,7 +20,7 @@ static int log2_lshift4(uint16_t x)
 	 * for i in range(1, 128):
 	 *     print(int(math.log2(i)*16),end=', ')
 	 */
-	static const uint8_t ret[128] = {
+	const uint8_t ret[128] = {
 		0,    0,    16,   25,   32,   37,   41,   44,   48,   50,
 		53,   55,   57,   59,   60,   62,   64,   65,   66,   67,
 		69,   70,   71,   72,   73,   74,   75,   76,   76,   77,
