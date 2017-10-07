@@ -1,4 +1,4 @@
-#include <stdint.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,7 +80,6 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 static int ilog2(uint64_t v)
 {
 	int l = 0;
-	v = v*v*v*v;
 	while ((1UL << l) < v)
 		l++;
 	return l;
@@ -89,18 +88,28 @@ static int ilog2(uint64_t v)
 #define ENTROPY_LVL_ACEPTABLE 70
 #define ENTROPY_LVL_HIGH 85
 
+static uint32_t ilog2_w(uint32_t num)
+{
+	const int ch = 1;
+	switch (ch) {
+		case 0: return log2_lshift4(num);
+		case 1: return ilog2(num*num*num*num);
+		default: return 0;
+	}
+}
+
 static uint32_t shannon_entropy(struct heuristic_ws *ws)
 {
-	int64_t entropy_max = 8*LOG2_RET_SHIFT;
-	uint64_t p, q, entropy_sum;
+	const uint32_t entropy_max = 8*ilog2_w(2);
+	uint32_t entropy_sum = 0;
+	uint32_t p, p_base, sz_base;
 	uint32_t i;
 
-	q = ws->sample_size;
-	q = log2_lshift4(q);
-	entropy_sum = 0;
+	sz_base = ilog2_w(ws->sample_size);
 	for (i = 0; i < BUCKET_SIZE && ws->bucket[i].count > 0; i++) {
 		p = ws->bucket[i].count;
-		entropy_sum += p*(q-log2_lshift4(p));
+		p_base = ilog2_w(p);
+		entropy_sum += p*(sz_base-p_base);
 	}
 
 	entropy_sum /= ws->sample_size;
