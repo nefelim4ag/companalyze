@@ -9,10 +9,9 @@
 #include "log2_lshift4.h"
 
 
+#if 0
 /* I think that not working as expected */
-
 /* Pair distance from random distribution */
-/*
 static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t coreset_size)
 {
 	uint64_t sum = 0;
@@ -28,7 +27,9 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 
 		pairs_count = 0;
 
-		// Search: ab, ba, bc, cb, cd, dc... pairs
+		/*
+		 * Search: ab, ba, bc, cb, cd, dc... pairs
+		 */
 		for (i2 = 0; i2 < ws->sample_size - 1; i2++) {
 			if (sample[i2] == pairs[0] && sample[i2 + 1] == pairs[1]) {
 				pairs_count++;
@@ -52,7 +53,7 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 
 	return sum >> 13;
 }
-*/
+#endif
 
 /*
  * Shannon Entropy calculation
@@ -117,6 +118,7 @@ static uint32_t shannon_entropy(struct heuristic_ws *ws)
 	return entropy_sum * 100 / entropy_max;
 }
 
+#if 0
 static uint32_t shannon_f(struct heuristic_ws *ws) {
 	uint32_t i;
 	double entropy_sum = 0;
@@ -130,7 +132,7 @@ static uint32_t shannon_f(struct heuristic_ws *ws) {
 
 	return entropy_sum*100/entropy_max;
 }
-
+#endif
 
 /* Compare buckets by size, ascending */
 static inline int bucket_comp_rev(const void *lv, const void *rv)
@@ -260,13 +262,16 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 		ret = -3;
 
 	shannon_e_i = shannon_entropy(workspace);
+#if(0)
 	shannon_e_f = shannon_f(workspace);
 
 	if (shannon_e_f > 0)
 		error = 100 - (shannon_e_i * 1.0 * 100 / (shannon_e_f));
+#endif
 
-//	rnd_distribution_dist = random_distribution_distance(&workspace, byte_core_set);
-
+#if(0)
+	rnd_distribution_dist = random_distribution_distance(&workspace, byte_core_set);
+#endif
 	if (shannon_e_i < ENTROPY_LVL_ACEPTABLE && ret == 0)
 		ret = 4;
 	else {
