@@ -49,6 +49,7 @@ struct heuristic_ws {
 	uint32_t sample_size;
 	/* Bucket store counter for each byte type */
 	struct bucket_item *bucket;
+	uint32_t bucket_size;
 };
 
 void heuristic_stats(void *addr, long unsigned byte_size);

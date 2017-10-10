@@ -108,7 +108,7 @@ static uint32_t shannon_entropy(struct heuristic_ws *ws)
 	uint32_t i;
 
 	sz_base = ilog2_w(ws->sample_size);
-	for (i = 0; i < BUCKET_SIZE && ws->bucket[i].count > 0; i++) {
+	for (i = 0; i < ws->bucket_size; i++) {
 		p = ws->bucket[i].count;
 		p_base = ilog2_w(p);
 		entropy_sum += p*(sz_base-p_base);
@@ -172,10 +172,22 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	struct bucket_item *bucket = ws->bucket;
 
-	/* Sort in reverse order */
-	sort(bucket, BUCKET_SIZE, sizeof(*bucket), &bucket_comp_rev, NULL);
+	ws->bucket_size = BUCKET_SIZE;
 
-	for (i = 0; i < BUCKET_SIZE && bucket[i].count > 0; i++) {
+	/* Sort in reverse order */
+	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
+
+	/*
+	 * Pre find end of bucket items
+	 */
+	while (ws->bucket_size >= 0) {
+		i = ws->bucket_size - 1;
+		if (bucket[i].count != 0)
+			break;
+		ws->bucket_size--;
+	}
+
+	for (i = 0; i < ws->bucket_size; i++) {
 		coreset_sum += bucket[i].count;
 		if (coreset_sum > core_set_threshold) {
 			i++;
