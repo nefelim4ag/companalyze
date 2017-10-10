@@ -1,4 +1,4 @@
-CFLAGS = -O2 -Wall -lm
+CFLAGS ?= -O2 -Wall -lm
 
 default all: lib log2_generator.out companalyze.out
 
