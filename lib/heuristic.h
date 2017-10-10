@@ -40,8 +40,6 @@
 			  SAMPLING_READ_SIZE / SAMPLING_INTERVAL)
 
 struct bucket_item {
-	uint8_t padding[3];
-	uint8_t symbol;
 	uint32_t count;
 };
 

@@ -12,6 +12,7 @@
 /* I think that not working as expected */
 
 /* Pair distance from random distribution */
+/*
 static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t coreset_size)
 {
 	uint64_t sum = 0;
@@ -26,9 +27,8 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 		pairs[1] = ws->bucket[i+1].symbol;
 
 		pairs_count = 0;
-		/*
-		 * Search: ab, ba, bc, cb, cd, dc... pairs
-		 */
+
+		// Search: ab, ba, bc, cb, cd, dc... pairs
 		for (i2 = 0; i2 < ws->sample_size - 1; i2++) {
 			if (sample[i2] == pairs[0] && sample[i2 + 1] == pairs[1]) {
 				pairs_count++;
@@ -52,6 +52,7 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 
 	return sum >> 13;
 }
+*/
 
 /*
  * Shannon Entropy calculation
@@ -218,55 +219,48 @@ static int sample_repeated_patterns(struct heuristic_ws *ws)
 	return !memcmp(&p[0], &p[half_of_sample], half_of_sample);
 }
 
-static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
+static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heuristic_ws *workspace)
 {
 	long unsigned i, curr_sample_pos;
 	int ret = 0;
-	struct heuristic_ws workspace;
 	uint32_t byte_set = 0;
 	uint32_t byte_core_set = 0;
 	uint32_t shannon_e_i = 0, shannon_e_f = 0;
 	uint32_t rnd_distribution_dist = 0;
 	float error = 0;
 
-	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
-	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
-
 	curr_sample_pos = 0;
 	for (i = 0; i < byte_size; i+= SAMPLING_INTERVAL) {
-		memcpy(&workspace.sample[curr_sample_pos], &addr[i], SAMPLING_READ_SIZE);
+		memcpy(&workspace->sample[curr_sample_pos], &addr[i], SAMPLING_READ_SIZE);
 		curr_sample_pos += SAMPLING_READ_SIZE;
 	}
 
-	workspace.sample_size = curr_sample_pos;
+	workspace->sample_size = curr_sample_pos;
 
-	int reppat = sample_repeated_patterns(&workspace);
+	int reppat = sample_repeated_patterns(workspace);
 	if (reppat)
 		ret = 1;
 
-	memset(workspace.bucket, 0, sizeof(*workspace.bucket)*BUCKET_SIZE);
+	memset(workspace->bucket, 0, sizeof(*workspace->bucket)*BUCKET_SIZE);
 
-	for (i = 0; i < BUCKET_SIZE; i++)
-		workspace.bucket->symbol = i;
-
-	for (i = 0; i < workspace.sample_size; i++) {
-		uint8_t *byte = &workspace.sample[i];
-		workspace.bucket[byte[0]].count++;
+	for (i = 0; i < workspace->sample_size; i++) {
+		uint8_t *byte = &workspace->sample[i];
+		workspace->bucket[byte[0]].count++;
 	}
 
-	byte_set = byte_set_size(&workspace);
+	byte_set = byte_set_size(workspace);
 	if (byte_set < BYTE_SET_THRESHOLD && ret == 0)
 		ret = 2;
 
-	byte_core_set = byte_core_set_size(&workspace);
+	byte_core_set = byte_core_set_size(workspace);
 	if (byte_core_set < BYTE_CORE_SET_LOW && ret == 0)
 		ret = 3;
 
 	if (byte_core_set > BYTE_CORE_SET_HIGH && ret == 0)
 		ret = -3;
 
-	shannon_e_i = shannon_entropy(&workspace);
-	shannon_e_f = shannon_f(&workspace);
+	shannon_e_i = shannon_entropy(workspace);
+	shannon_e_f = shannon_f(workspace);
 
 	if (shannon_e_f > 0)
 		error = 100 - (shannon_e_i * 1.0 * 100 / (shannon_e_f));
@@ -298,26 +292,30 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size)
 
 	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u ~%3.1f%%, RndDist: %5u, out: %i\n",
 		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, error, rnd_distribution_dist, ret);
-
-	free(workspace.sample);
-	free(workspace.bucket);
 }
 
 void heuristic_stats(void *addr, long unsigned byte_size)
 {
 	uint64_t i;
 	uint8_t *in_data = (uint8_t *) addr;
+	struct heuristic_ws workspace;
 	long unsigned chunks = byte_size / BTRFS_MAX_UNCOMPRESSED;
 	long unsigned tail   = byte_size % BTRFS_MAX_UNCOMPRESSED;
 
+	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
+	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+
 	for (i = 0; i < chunks; i++) {
 		printf("%5lu. ", i);
-		__heuristic_stats(in_data, BTRFS_MAX_UNCOMPRESSED);
+		__heuristic_stats(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
 		in_data += BTRFS_MAX_UNCOMPRESSED;
 	}
 
 	if (tail) {
 		printf("%5lu. ", i);
-		__heuristic_stats(in_data, tail);
+		__heuristic_stats(in_data, tail, &workspace);
 	}
+
+	free(workspace.sample);
+	free(workspace.bucket);
 }

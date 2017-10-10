@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
 	start = clock()*1000000/CLOCKS_PER_SEC;
 	heuristic_stats(addr, file_size);
 	end = clock()*1000000/CLOCKS_PER_SEC;
+
 	printf("Perf: %lu us ~ %fMiB/s\n", (end - start), file_size*1.0/(end - start));
 
 	return 0;
