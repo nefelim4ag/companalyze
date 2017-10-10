@@ -11,7 +11,7 @@
 #include "lib/heuristic.h"
 
 #define MMAP_PROT (PROT_READ|PROT_NONE)
-#define MMAP_FLAG (MAP_SHARED)
+#define MMAP_FLAG (MAP_SHARED|MAP_NORESERVE)
 
 int main(int argc, char *argv[]) {
 	struct stat file_stat;
@@ -33,9 +33,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	addr = mmap (0, file_size, MMAP_PROT, MMAP_FLAG, fd, 0);
+
 	start = clock()*1000000/CLOCKS_PER_SEC;
 	heuristic_stats(addr, file_size);
 	end = clock()*1000000/CLOCKS_PER_SEC;
+
+	munmap(addr, file_size);
 
 	printf("Perf: %lu us ~ %fMiB/s\n", (end - start), file_size*1.0/(end - start));
 
