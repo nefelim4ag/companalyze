@@ -1,17 +1,9 @@
 CFLAGS ?= -O2 -Wall -lm
 
-default all: lib log2_generator.out companalyze.out
+default all: lib companalyze.out
 
 lib: ## Build libs
 	$(MAKE) -C lib
-
-
-log2_generator.o: log2_generator.c
-	$(CC) $(CFLAGS) -c $? -o $@
-
-log2_generator.out: log2_generator.o
-	$(CC) $(CFLAGS) -o $@ $?
-
 
 companalyze.o: companalyze.c
 	$(CC) $(CFLAGS) -c $? -o $@

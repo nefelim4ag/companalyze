@@ -2,11 +2,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+/* For float log2() */
 #include <math.h>
 
 #include "sort.h"
 #include "heuristic.h"
-#include "log2_lshift4.h"
 
 
 #if 0
@@ -92,12 +92,7 @@ static int ilog2(uint64_t v)
 
 static uint32_t ilog2_w(uint64_t num)
 {
-	const int ch = 1;
-	switch (ch) {
-		case 0: return log2_lshift4(num);
-		case 1: return ilog2(num*num*num*num);
-		default: return 0;
-	}
+	return ilog2(num*num*num*num);
 }
 
 static uint32_t shannon_entropy(struct heuristic_ws *ws)
