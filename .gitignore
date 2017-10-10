@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Valgrind
+callgrind.out.*
+
 # Object files
 *.o
 *.ko
