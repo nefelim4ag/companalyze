@@ -148,7 +148,7 @@ static inline uint8_t get4bits(uint32_t num, uint8_t shift) {
 	return low4bits;
 }
 
-static inline void bucket_radix_sort(const struct heuristic_ws *ws)
+static void bucket_radix_sort(const struct heuristic_ws *ws)
 {
 	uint16_t counters[COUNTERS_SIZE];
 	uint8_t addr;
