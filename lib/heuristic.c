@@ -138,6 +138,45 @@ static inline int bucket_comp_rev(const void *lv, const void *rv)
 	return r->count - l->count;
 }
 
+#define COUNTERS_SIZE 16
+
+static inline uint8_t get4bits(uint32_t num, uint8_t shift) {
+	uint8_t low4bits;
+	num = num >> shift;
+	/* Reverse order */
+	low4bits = (COUNTERS_SIZE - 1) - (num % COUNTERS_SIZE);
+	return low4bits;
+}
+
+static inline void bucket_radix_sort(const struct heuristic_ws *ws)
+{
+	uint16_t counters[COUNTERS_SIZE];
+	uint8_t addr;
+	uint8_t new_addr;
+	int i, shift;
+
+	for (shift = 0; shift < 16; shift += 4) {
+		memset(counters, 0, sizeof(counters));
+
+		for (i = 0; i < BUCKET_SIZE; i++) {
+			addr = get4bits(ws->bucket[i].count, shift);
+			counters[addr]++;
+		}
+
+		for (i = 1; i < COUNTERS_SIZE; i++) {
+			counters[i] += counters[i-1];
+		}
+
+		for (i = BUCKET_SIZE - 1; i >= 0; i--) {
+			addr = get4bits(ws->bucket[i].count, shift);
+			counters[addr]--;
+			new_addr = counters[addr];
+			ws->bucket_tmp[new_addr] = ws->bucket[i];
+		}
+		memcpy(ws->bucket, ws->bucket_tmp, BUCKET_SIZE*sizeof(*ws->bucket));
+	}
+}
+
 /*
  * Byte Core set size
  * How many bytes use 90% of sample
@@ -168,19 +207,21 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	uint32_t coreset_end;
 	struct bucket_item *bucket = ws->bucket;
 
-	ws->bucket_size = BUCKET_SIZE;
-
 	/* Sort in reverse order */
+#if (1)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
+#else
+	bucket_radix_sort(ws);
+#endif
 
 	/*
 	 * Pre find end of bucket items
 	 */
 	while (ws->bucket_size >= 0) {
-		i = ws->bucket_size - 1;
+		ws->bucket_size--;
+		i = ws->bucket_size;
 		if (bucket[i].count != 0)
 			break;
-		ws->bucket_size--;
 	}
 
 	for (i = 0; i < BYTE_CORE_SET_LOW; i++)
@@ -209,19 +250,20 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	struct bucket_item *bucket = ws->bucket;
 
-	ws->bucket_size = BUCKET_SIZE;
-
 	/* Sort in reverse order */
+#if (1)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
-
+#else
+	bucket_radix_sort(ws);
+#endif
 	/*
 	 * Pre find end of bucket items
 	 */
 	while (ws->bucket_size >= 0) {
-		i = ws->bucket_size - 1;
+		ws->bucket_size--;
+		i = ws->bucket_size;
 		if (bucket[i].count != 0)
 			break;
-		ws->bucket_size--;
 	}
 
 	for (i = 0; i < ws->bucket_size; i++) {
@@ -322,21 +364,24 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 	memset(workspace->bucket, 0, sizeof(*workspace->bucket)*BUCKET_SIZE);
 
 	for (i = 0; i < workspace->sample_size; i++) {
-		uint8_t *byte = &workspace->sample[i];
-		workspace->bucket[byte[0]].count++;
+		uint8_t byte = workspace->sample[i];
+		workspace->bucket[byte].count++;
 	}
 
 	byte_set = byte_set_size_stats(workspace);
 	if (byte_set <= BYTE_SET_THRESHOLD && ret == 0)
 		ret = 2;
 
+	workspace->bucket_size = BUCKET_SIZE;
+
+#if (1)
 	byte_core_set = byte_core_set_size_stats(workspace);
 	if (byte_core_set <= BYTE_CORE_SET_LOW && ret == 0)
 		ret = 3;
 
 	if (byte_core_set >= BYTE_CORE_SET_HIGH && ret == 0)
 		ret = -3;
-
+#endif
 	shannon_e_i = shannon_entropy(workspace);
 #if(0)
 	shannon_e_f = shannon_f(workspace);
@@ -385,6 +430,7 @@ void heuristic_stats(void *addr, long unsigned byte_size)
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
 	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket_tmp));
 
 	for (i = 0; i < chunks; i++) {
 		printf("%5lu. ", i);
@@ -399,6 +445,7 @@ void heuristic_stats(void *addr, long unsigned byte_size)
 
 	free(workspace.sample);
 	free(workspace.bucket);
+	free(workspace.bucket_tmp);
 }
 
 static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic_ws *workspace)
@@ -435,6 +482,8 @@ static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic
 		ret = 2;
 		goto out;
 	}
+
+	workspace->bucket_size = BUCKET_SIZE;
 
 	byte_core_set = byte_core_set_size(workspace);
 	if (byte_core_set <= BYTE_CORE_SET_LOW) {
@@ -477,6 +526,7 @@ void heuristic(void *addr, long unsigned byte_size)
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
 	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket_tmp));
 
 	for (i = 0; i < chunks; i++) {
 		printf("%5lu. ", i);
@@ -491,4 +541,5 @@ void heuristic(void *addr, long unsigned byte_size)
 
 	free(workspace.sample);
 	free(workspace.bucket);
+	free(workspace.bucket_tmp);
 }
