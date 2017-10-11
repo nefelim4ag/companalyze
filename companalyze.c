@@ -35,7 +35,11 @@ int main(int argc, char *argv[]) {
 	addr = mmap (0, file_size, MMAP_PROT, MMAP_FLAG, fd, 0);
 
 	start = clock()*1000000/CLOCKS_PER_SEC;
+#if (1)
 	heuristic_stats(addr, file_size);
+#else
+	heuristic(addr, file_size);
+#endif
 	end = clock()*1000000/CLOCKS_PER_SEC;
 
 	munmap(addr, file_size);

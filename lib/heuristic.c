@@ -9,7 +9,7 @@
 #include "heuristic.h"
 
 
-#if 0
+#if (0)
 /* I think that not working as expected */
 /* Pair distance from random distribution */
 static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t coreset_size)
@@ -165,6 +165,48 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	uint32_t i;
 	uint32_t coreset_sum = 0;
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
+	uint32_t coreset_end;
+	struct bucket_item *bucket = ws->bucket;
+
+	ws->bucket_size = BUCKET_SIZE;
+
+	/* Sort in reverse order */
+	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
+
+	/*
+	 * Pre find end of bucket items
+	 */
+	while (ws->bucket_size >= 0) {
+		i = ws->bucket_size - 1;
+		if (bucket[i].count != 0)
+			break;
+		ws->bucket_size--;
+	}
+
+	for (i = 0; i < BYTE_CORE_SET_LOW; i++)
+		coreset_sum += bucket[i].count;
+
+	if (coreset_sum > core_set_threshold)
+		return i;
+
+	coreset_end = BYTE_CORE_SET_HIGH;
+	if (coreset_end > ws->bucket_size)
+		coreset_end = ws->bucket_size;
+
+	for (; i < coreset_end; i++) {
+		coreset_sum += bucket[i].count;
+		if (coreset_sum > core_set_threshold)
+			break;
+	}
+
+	return i;
+}
+
+static int byte_core_set_size_stats(struct heuristic_ws *ws)
+{
+	uint32_t i;
+	uint32_t coreset_sum = 0;
+	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	struct bucket_item *bucket = ws->bucket;
 
 	ws->bucket_size = BUCKET_SIZE;
@@ -208,6 +250,33 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 #define BYTE_SET_THRESHOLD 64
 
 static uint32_t byte_set_size(const struct heuristic_ws *ws)
+{
+	uint32_t i;
+	uint32_t byte_set_size = 0;
+
+	for (i = 0; i < BYTE_SET_THRESHOLD; i++) {
+		if (ws->bucket[i].count > 0)
+			byte_set_size++;
+	}
+
+	/*
+	 * Continue collecting count of byte types in bucket
+	 * If byte set size bigger then threshold
+	 * That useless to continue, because for that data type
+	 * detection technique fail
+	 */
+	for (; i < BUCKET_SIZE; i++) {
+		if (ws->bucket[i].count > 0) {
+			byte_set_size++;
+			if (byte_set_size > BYTE_SET_THRESHOLD)
+				return byte_set_size;
+		}
+	}
+
+	return byte_set_size;
+}
+
+static uint32_t byte_set_size_stats(const struct heuristic_ws *ws)
 {
 	uint32_t i;
 	uint32_t byte_set_size = 0;
@@ -257,15 +326,15 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 		workspace->bucket[byte[0]].count++;
 	}
 
-	byte_set = byte_set_size(workspace);
-	if (byte_set < BYTE_SET_THRESHOLD && ret == 0)
+	byte_set = byte_set_size_stats(workspace);
+	if (byte_set <= BYTE_SET_THRESHOLD && ret == 0)
 		ret = 2;
 
-	byte_core_set = byte_core_set_size(workspace);
-	if (byte_core_set < BYTE_CORE_SET_LOW && ret == 0)
+	byte_core_set = byte_core_set_size_stats(workspace);
+	if (byte_core_set <= BYTE_CORE_SET_LOW && ret == 0)
 		ret = 3;
 
-	if (byte_core_set > BYTE_CORE_SET_HIGH && ret == 0)
+	if (byte_core_set >= BYTE_CORE_SET_HIGH && ret == 0)
 		ret = -3;
 
 	shannon_e_i = shannon_entropy(workspace);
@@ -326,6 +395,98 @@ void heuristic_stats(void *addr, long unsigned byte_size)
 	if (tail) {
 		printf("%5lu. ", i);
 		__heuristic_stats(in_data, tail, &workspace);
+	}
+
+	free(workspace.sample);
+	free(workspace.bucket);
+}
+
+static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic_ws *workspace)
+{
+	long unsigned i, curr_sample_pos;
+	int ret = 0;
+	uint32_t byte_set = 0;
+	uint32_t byte_core_set = 0;
+	uint32_t shannon_e_i = 0;
+
+	curr_sample_pos = 0;
+	for (i = 0; i < byte_size; i+= SAMPLING_INTERVAL) {
+		memcpy(&workspace->sample[curr_sample_pos], &addr[i], SAMPLING_READ_SIZE);
+		curr_sample_pos += SAMPLING_READ_SIZE;
+	}
+
+	workspace->sample_size = curr_sample_pos;
+
+	int reppat = sample_repeated_patterns(workspace);
+	if (reppat) {
+		ret = 1;
+		goto out;
+	}
+
+	memset(workspace->bucket, 0, sizeof(*workspace->bucket)*BUCKET_SIZE);
+
+	for (i = 0; i < workspace->sample_size; i++) {
+		uint8_t *byte = &workspace->sample[i];
+		workspace->bucket[byte[0]].count++;
+	}
+
+	byte_set = byte_set_size(workspace);
+	if (byte_set <= BYTE_SET_THRESHOLD) {
+		ret = 2;
+		goto out;
+	}
+
+	byte_core_set = byte_core_set_size(workspace);
+	if (byte_core_set <= BYTE_CORE_SET_LOW) {
+		ret = 3;
+		goto out;
+	}
+
+	if (byte_core_set >= BYTE_CORE_SET_HIGH) {
+		ret = -3;
+		goto out;
+	}
+
+	shannon_e_i = shannon_entropy(workspace);
+
+	if (shannon_e_i < ENTROPY_LVL_ACEPTABLE) {
+		ret = 4;
+		goto out;
+	}
+
+	if (shannon_e_i < ENTROPY_LVL_HIGH) {
+		ret = 5;
+		goto out;
+	} else {
+		ret = -5;
+		goto out;
+	}
+
+out:
+	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u, out: %i\n",
+		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, ret);
+}
+
+void heuristic(void *addr, long unsigned byte_size)
+{
+	uint64_t i;
+	uint8_t *in_data = (uint8_t *) addr;
+	struct heuristic_ws workspace;
+	long unsigned chunks = byte_size / BTRFS_MAX_UNCOMPRESSED;
+	long unsigned tail   = byte_size % BTRFS_MAX_UNCOMPRESSED;
+
+	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
+	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+
+	for (i = 0; i < chunks; i++) {
+		printf("%5lu. ", i);
+		__heuristic(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
+		in_data += BTRFS_MAX_UNCOMPRESSED;
+	}
+
+	if (tail) {
+		printf("%5lu. ", i);
+		__heuristic(in_data, tail, &workspace);
 	}
 
 	free(workspace.sample);

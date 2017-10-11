@@ -53,3 +53,4 @@ struct heuristic_ws {
 };
 
 void heuristic_stats(void *addr, long unsigned byte_size);
+void heuristic(void *addr, long unsigned byte_size);
