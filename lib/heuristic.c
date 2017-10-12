@@ -138,11 +138,12 @@ static inline int bucket_comp_rev(const void *lv, const void *rv)
 	return r->count - l->count;
 }
 
-#define USE_HEAP_SORT 1
+#define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
 
+#define USE_HEAP_SORT 1
 #define COUNTERS_SIZE 16
 
-static inline uint8_t get4bits(uint32_t num, uint8_t shift) {
+static inline uint8_t get4bits(uint64_t num, int shift) {
 	uint8_t low4bits;
 	num = num >> shift;
 	/* Reverse order */
@@ -150,8 +151,89 @@ static inline uint8_t get4bits(uint32_t num, uint8_t shift) {
 	return low4bits;
 }
 
-#define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
+static inline void copy_cell(void *dst, const void *src)
+{
+	struct bucket_item *dstv = (struct bucket_item *) dst;
+	struct bucket_item *srcv = (struct bucket_item *) src;
+	*dstv = *srcv;
+}
 
+static inline uint64_t get_num(const void *a)
+{
+	struct bucket_item *av = (struct bucket_item *) a;
+	return av->count;
+}
+
+/*
+ * Kernel compatible radix sort implementation
+ * Use 4 bits as radix base
+ * Use 16 64bit counters for calculating new possition in buf array
+ *
+ * @array     - array that will be sorted
+ * @array_buf - buffer array to store sorting results
+ *              must be equal in size to @array
+ * @num       - array size
+ * @size      - item size
+ * @get_num   - function to extract number from array
+ * @copy_cell - function to copy data from array to array_buf
+ *              and vise versa
+ * @get4bits  - function to get 4 bits from number at specified offset
+ */
+
+static void radix_sort(void *array, void *array_buf,
+		       int num, int size,
+		       uint64_t (*get_num)(const void *),
+		       void (*copy_cell)(void *dest, const void* src),
+		       uint8_t (*get4bits)(uint64_t num, int shift))
+{
+	uint64_t max_num;
+	uint64_t buf_num;
+	uint64_t counters[COUNTERS_SIZE];
+	uint64_t new_addr;
+	int64_t i;
+	int addr;
+	int bitlen;
+	int shift;
+
+	max_num = get_num(array);
+	for (i = 0 + size; i < num*size; i += size) {
+		buf_num = get_num(array + i);
+		if (buf_num > max_num)
+			max_num = buf_num;
+	}
+
+
+	buf_num = ilog2(max_num);
+	bitlen = ALIGN_UP(buf_num, 4);
+
+	for (shift = 0; shift < bitlen; shift += 4) {
+		memset(counters, 0, sizeof(counters));
+
+		for (i = 0; i < num*size; i += size) {
+			buf_num = get_num(array + i);
+			addr = get4bits(buf_num, shift);
+			counters[addr]++;
+		}
+
+		for (i = 1; i < COUNTERS_SIZE; i++) {
+			counters[i] += counters[i-1];
+		}
+
+		for (i = (num - 1) * size; i >= 0; i -= size) {
+			buf_num = get_num(array + i);
+			addr = get4bits(buf_num, shift);
+			counters[addr]--;
+			new_addr = counters[addr];
+			copy_cell(array_buf + (new_addr*size), array + i);
+		}
+
+		for (i = 0; i < num; i++) {
+			copy_cell(array + (i*size), array_buf + (i*size));
+		}
+	}
+}
+
+#if (0)
 static void bucket_radix_sort(const struct heuristic_ws *ws)
 {
 	uint16_t max_num = 0;
@@ -188,6 +270,7 @@ static void bucket_radix_sort(const struct heuristic_ws *ws)
 		memcpy(ws->bucket, ws->bucket_tmp, BUCKET_SIZE*sizeof(*ws->bucket));
 	}
 }
+#endif
 
 /*
  * Byte Core set size
@@ -223,7 +306,9 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 #if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
-	bucket_radix_sort(ws);
+	radix_sort(ws->bucket, ws->bucket_tmp,
+		   ws->bucket_size, sizeof(*bucket),
+		   get_num, copy_cell, get4bits);
 #endif
 
 	/*
@@ -266,7 +351,9 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 #if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
-	bucket_radix_sort(ws);
+	radix_sort(ws->bucket, ws->bucket_tmp,
+		   ws->bucket_size, sizeof(*bucket),
+		   get_num, copy_cell, get4bits);
 #endif
 	/*
 	 * Pre find end of bucket items
