@@ -174,6 +174,9 @@ static inline uint64_t get_num(const void *a)
  *              must be equal in size to @array
  * @num       - array size
  * @size      - item size
+ * @max_cell  - Link to element with maximum possible value
+ *              that can be used to cap radix sort iterations
+ *              if we know maximum value before call sort
  * @get_num   - function to extract number from array
  * @copy_cell - function to copy data from array to array_buf
  *              and vise versa
@@ -182,6 +185,7 @@ static inline uint64_t get_num(const void *a)
 
 static void radix_sort(void *array, void *array_buf,
 		       int num, int size,
+		       const void *max_cell,
 		       uint64_t (*get_num)(const void *),
 		       void (*copy_cell)(void *dest, const void* src),
 		       uint8_t (*get4bits)(uint64_t num, int shift))
@@ -195,11 +199,15 @@ static void radix_sort(void *array, void *array_buf,
 	int bitlen;
 	int shift;
 
-	max_num = get_num(array);
-	for (i = 0 + size; i < num*size; i += size) {
-		buf_num = get_num(array + i);
-		if (buf_num > max_num)
-			max_num = buf_num;
+	if (!max_cell) {
+		max_num = get_num(array);
+		for (i = 0 + size; i < num*size; i += size) {
+			buf_num = get_num(array + i);
+			if (buf_num > max_num)
+				max_num = buf_num;
+		}
+	} else {
+		max_num = get_num(max_cell);
 	}
 
 
@@ -301,13 +309,16 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	uint32_t coreset_end;
 	struct bucket_item *bucket = ws->bucket;
+	struct bucket_item max_cell;
 
 	/* Sort in reverse order */
 #if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
+	max_cell.count = MAX_SAMPLE_SIZE;
 	radix_sort(ws->bucket, ws->bucket_tmp,
 		   ws->bucket_size, sizeof(*bucket),
+		   &max_cell,
 		   get_num, copy_cell, get4bits);
 #endif
 
@@ -346,13 +357,16 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 	uint32_t coreset_sum = 0;
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	struct bucket_item *bucket = ws->bucket;
+	struct bucket_item max_cell;
 
 	/* Sort in reverse order */
 #if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
+	max_cell.count = MAX_SAMPLE_SIZE;
 	radix_sort(ws->bucket, ws->bucket_tmp,
 		   ws->bucket_size, sizeof(*bucket),
+		   &max_cell,
 		   get_num, copy_cell, get4bits);
 #endif
 	/*
