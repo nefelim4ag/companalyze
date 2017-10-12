@@ -138,6 +138,8 @@ static inline int bucket_comp_rev(const void *lv, const void *rv)
 	return r->count - l->count;
 }
 
+#define USE_HEAP_SORT 1
+
 #define COUNTERS_SIZE 16
 
 static inline uint8_t get4bits(uint32_t num, uint8_t shift) {
@@ -148,14 +150,24 @@ static inline uint8_t get4bits(uint32_t num, uint8_t shift) {
 	return low4bits;
 }
 
+#define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
+
 static void bucket_radix_sort(const struct heuristic_ws *ws)
 {
+	uint16_t max_num = 0;
 	uint16_t counters[COUNTERS_SIZE];
-	uint8_t addr;
-	uint8_t new_addr;
+	uint8_t addr, new_addr, bitlen;
 	int i, shift;
 
-	for (shift = 0; shift < 16; shift += 4) {
+	for (i = 0; i < BUCKET_SIZE; i++) {
+		if (ws->bucket[i].count > max_num)
+			max_num = ws->bucket[i].count;
+	}
+
+	max_num = ilog2(max_num);
+	bitlen = ALIGN_UP(max_num, 4);
+
+	for (shift = 0; shift < bitlen; shift += 4) {
 		memset(counters, 0, sizeof(counters));
 
 		for (i = 0; i < BUCKET_SIZE; i++) {
@@ -208,7 +220,7 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	struct bucket_item *bucket = ws->bucket;
 
 	/* Sort in reverse order */
-#if (1)
+#if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
 	bucket_radix_sort(ws);
@@ -251,7 +263,7 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 	struct bucket_item *bucket = ws->bucket;
 
 	/* Sort in reverse order */
-#if (1)
+#if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
 	bucket_radix_sort(ws);
