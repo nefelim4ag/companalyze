@@ -235,9 +235,7 @@ static void radix_sort(void *array, void *array_buf,
 			copy_cell(array_buf + (new_addr*size), array + i);
 		}
 
-		for (i = 0; i < num; i++) {
-			copy_cell(array + (i*size), array_buf + (i*size));
-		}
+		memcpy(array, array_buf, num*size);
 	}
 }
 
@@ -638,8 +636,8 @@ void heuristic(void *addr, long unsigned byte_size)
 	long unsigned tail   = byte_size % BTRFS_MAX_UNCOMPRESSED;
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
-	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
-	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket_tmp));
+	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE*2, sizeof(*workspace.bucket));
+	workspace.bucket_tmp = &workspace.bucket[BUCKET_SIZE];
 
 	for (i = 0; i < chunks; i++) {
 		printf("%5lu. ", i);
@@ -654,5 +652,4 @@ void heuristic(void *addr, long unsigned byte_size)
 
 	free(workspace.sample);
 	free(workspace.bucket);
-	free(workspace.bucket_tmp);
 }
