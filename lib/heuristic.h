@@ -1,5 +1,7 @@
 #include <stdint.h>
 
+extern int enable_stats_printf;
+
 /*
  * Btrfs compression restriction
  */

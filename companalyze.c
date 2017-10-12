@@ -13,6 +13,8 @@
 #define MMAP_PROT (PROT_READ|PROT_NONE)
 #define MMAP_FLAG (MAP_SHARED|MAP_NORESERVE)
 
+extern int enable_stats_printf;
+
 int main(int argc, char *argv[]) {
 	struct stat file_stat;
 	clock_t start, end;
@@ -34,6 +36,7 @@ int main(int argc, char *argv[]) {
 
 	addr = mmap (0, file_size, MMAP_PROT, MMAP_FLAG, fd, 0);
 
+	enable_stats_printf = 1;
 	start = clock()*1000000/CLOCKS_PER_SEC;
 #if (1)
 	heuristic_stats(addr, file_size);

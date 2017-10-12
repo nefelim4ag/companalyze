@@ -8,6 +8,7 @@
 #include "sort.h"
 #include "heuristic.h"
 
+int enable_stats_printf;
 
 #if (0)
 /* I think that not working as expected */
@@ -114,7 +115,7 @@ int ilog2_64 (uint64_t value)
 
 static uint32_t ilog2_w(uint64_t num)
 {
-#if (1)
+#if (0)
 	return ilog2(num*num*num*num);
 #else
 	return ilog2_64(num*num*num*num);
@@ -589,9 +590,10 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 		}
 	}
 
-
-	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u ~%3.1f%%, RndDist: %5u, out: %i\n",
-		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, error, rnd_distribution_dist, ret);
+	if (enable_stats_printf) {
+		printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u ~%3.1f%%, RndDist: %5u, out: %i\n",
+			byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, error, rnd_distribution_dist, ret);
+	}
 }
 
 void heuristic_stats(void *addr, long unsigned byte_size)
@@ -603,23 +605,26 @@ void heuristic_stats(void *addr, long unsigned byte_size)
 	long unsigned tail   = byte_size % BTRFS_MAX_UNCOMPRESSED;
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
-	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
-	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket_tmp));
+	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE*2, sizeof(*workspace.bucket));
+	workspace.bucket_tmp = &workspace.bucket[BUCKET_SIZE];
 
 	for (i = 0; i < chunks; i++) {
-		printf("%5lu. ", i);
+		if (enable_stats_printf) {
+			printf("%5lu. ", i);
+		}
 		__heuristic_stats(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
 		in_data += BTRFS_MAX_UNCOMPRESSED;
 	}
 
 	if (tail) {
-		printf("%5lu. ", i);
+		if (enable_stats_printf) {
+			printf("%5lu. ", i);
+		}
 		__heuristic_stats(in_data, tail, &workspace);
 	}
 
 	free(workspace.sample);
 	free(workspace.bucket);
-	free(workspace.bucket_tmp);
 }
 
 static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic_ws *workspace)
@@ -686,8 +691,10 @@ static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic
 	}
 
 out:
-	printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u, out: %i\n",
-		byte_size, reppat, byte_set, byte_core_set, shannon_e_i, ret);
+	if (enable_stats_printf) {
+		printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u, out: %i\n",
+			byte_size, reppat, byte_set, byte_core_set, shannon_e_i, ret);
+	}
 }
 
 void heuristic(void *addr, long unsigned byte_size)
@@ -703,13 +710,17 @@ void heuristic(void *addr, long unsigned byte_size)
 	workspace.bucket_tmp = &workspace.bucket[BUCKET_SIZE];
 
 	for (i = 0; i < chunks; i++) {
-		printf("%5lu. ", i);
+		if (enable_stats_printf) {
+			printf("%5lu. ", i);
+		}
 		__heuristic(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
 		in_data += BTRFS_MAX_UNCOMPRESSED;
 	}
 
 	if (tail) {
-		printf("%5lu. ", i);
+		if (enable_stats_printf) {
+			printf("%5lu. ", i);
+		}
 		__heuristic(in_data, tail, &workspace);
 	}
 
