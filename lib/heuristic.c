@@ -168,8 +168,10 @@ static inline int bucket_comp_rev(const void *lv, const void *rv)
 #define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
 
 #define USE_HEAP_SORT 1
-#define COUNTERS_SIZE 16
+#define RADIX_BASE 4
+#define COUNTERS_SIZE (1 << RADIX_BASE)
 
+#if (!USE_HEAP_SORT)
 static inline uint8_t get4bits(uint64_t num, int shift) {
 	uint8_t low4bits;
 	num = num >> shift;
@@ -244,7 +246,7 @@ static void radix_sort(void *array, void *array_buf,
 
 
 	buf_num = ilog2(max_num);
-	bitlen = ALIGN_UP(buf_num, 8);
+	bitlen = ALIGN_UP(buf_num, RADIX_BASE*2);
 
 	shift = 0;
 	while (shift < bitlen) {
@@ -268,7 +270,7 @@ static void radix_sort(void *array, void *array_buf,
 			copy_cell(array_buf + (new_addr*size), array + i);
 		}
 
-		shift += 4;
+		shift += RADIX_BASE;
 
 		/*
 		 * For normal radix, that expected to
@@ -277,8 +279,6 @@ static void radix_sort(void *array, void *array_buf,
 		 * Avoid that by doing another sort iteration
 		 * to origin array instead of memcpy()
 		 */
-
-
 		memset(counters, 0, sizeof(counters));
 
 		for (i = 0; i < num*size; i += size) {
@@ -299,9 +299,10 @@ static void radix_sort(void *array, void *array_buf,
 			copy_cell(array + (new_addr*size), array_buf + i);
 		}
 
-		shift += 4;
+		shift += RADIX_BASE;
 	}
 }
+#endif
 
 #if (0)
 static void bucket_radix_sort(const struct heuristic_ws *ws)
