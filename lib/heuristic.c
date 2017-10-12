@@ -225,6 +225,11 @@ static void radix_sort(void *array, void *array_buf,
 	int bitlen;
 	int shift;
 
+	/*
+	 * Try avoid useless loop iterations
+	 * For small numbers stored in big counters
+	 * example: 48 33 4 ... in 64bit array
+	 */
 	if (!max_cell) {
 		max_num = get_num(array);
 		for (i = 0 + size; i < num*size; i += size) {
@@ -238,9 +243,10 @@ static void radix_sort(void *array, void *array_buf,
 
 
 	buf_num = ilog2(max_num);
-	bitlen = ALIGN_UP(buf_num, 4);
+	bitlen = ALIGN_UP(buf_num, 8);
 
-	for (shift = 0; shift < bitlen; shift += 4) {
+	shift = 0;
+	while (shift < bitlen) {
 		memset(counters, 0, sizeof(counters));
 
 		for (i = 0; i < num*size; i += size) {
@@ -261,7 +267,38 @@ static void radix_sort(void *array, void *array_buf,
 			copy_cell(array_buf + (new_addr*size), array + i);
 		}
 
-		memcpy(array, array_buf, num*size);
+		shift += 4;
+
+		/*
+		 * For normal radix, that expected to
+		 * move data from tmp array, to main.
+		 * But that require some CPU time
+		 * Avoid that by doing another sort iteration
+		 * to origin array instead of memcpy()
+		 */
+
+
+		memset(counters, 0, sizeof(counters));
+
+		for (i = 0; i < num*size; i += size) {
+			buf_num = get_num(array_buf + i);
+			addr = get4bits(buf_num, shift);
+			counters[addr]++;
+		}
+
+		for (i = 1; i < COUNTERS_SIZE; i++) {
+			counters[i] += counters[i-1];
+		}
+
+		for (i = (num - 1) * size; i >= 0; i -= size) {
+			buf_num = get_num(array_buf + i);
+			addr = get4bits(buf_num, shift);
+			counters[addr]--;
+			new_addr = counters[addr];
+			copy_cell(array + (new_addr*size), array_buf + i);
+		}
+
+		shift += 4;
 	}
 }
 
