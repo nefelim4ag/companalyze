@@ -180,17 +180,17 @@ static inline uint8_t get4bits(uint64_t num, int shift) {
 	return low4bits;
 }
 
-static inline void copy_cell(void *dst, const void *src)
+static inline void copy_cell(void *dst, int dest_i, void *src, int src_i)
 {
 	struct bucket_item *dstv = (struct bucket_item *) dst;
 	struct bucket_item *srcv = (struct bucket_item *) src;
-	*dstv = *srcv;
+	dstv[dest_i] = srcv[src_i];
 }
 
-static inline uint64_t get_num(const void *a)
+static inline uint64_t get_num(const void *a, int i)
 {
 	struct bucket_item *av = (struct bucket_item *) a;
-	return av->count;
+	return av[i].count;
 }
 
 /*
@@ -202,7 +202,6 @@ static inline uint64_t get_num(const void *a)
  * @array_buf - buffer array to store sorting results
  *              must be equal in size to @array
  * @num       - array size
- * @size      - item size
  * @max_cell  - Link to element with maximum possible value
  *              that can be used to cap radix sort iterations
  *              if we know maximum value before call sort
@@ -213,17 +212,18 @@ static inline uint64_t get_num(const void *a)
  */
 
 static void radix_sort(void *array, void *array_buf,
-		       int num, int size,
+		       int num,
 		       const void *max_cell,
-		       uint64_t (*get_num)(const void *),
-		       void (*copy_cell)(void *dest, const void* src),
+		       uint64_t (*get_num)(const void *, int i),
+		       void (*copy_cell)(void *dest, int dest_i,
+					 void* src, int src_i),
 		       uint8_t (*get4bits)(uint64_t num, int shift))
 {
 	uint64_t max_num;
 	uint64_t buf_num;
 	uint64_t counters[COUNTERS_SIZE];
 	uint64_t new_addr;
-	int64_t i;
+	int i;
 	int addr;
 	int bitlen;
 	int shift;
@@ -234,14 +234,14 @@ static void radix_sort(void *array, void *array_buf,
 	 * example: 48 33 4 ... in 64bit array
 	 */
 	if (!max_cell) {
-		max_num = get_num(array);
-		for (i = 0 + size; i < num*size; i += size) {
-			buf_num = get_num(array + i);
+		max_num = get_num(array, 0);
+		for (i = 1; i < num; i++) {
+			buf_num = get_num(array, i);
 			if (buf_num > max_num)
 				max_num = buf_num;
 		}
 	} else {
-		max_num = get_num(max_cell);
+		max_num = get_num(max_cell, 0);
 	}
 
 
@@ -252,8 +252,8 @@ static void radix_sort(void *array, void *array_buf,
 	while (shift < bitlen) {
 		memset(counters, 0, sizeof(counters));
 
-		for (i = 0; i < num*size; i += size) {
-			buf_num = get_num(array + i);
+		for (i = 0; i < num; i++) {
+			buf_num = get_num(array, i);
 			addr = get4bits(buf_num, shift);
 			counters[addr]++;
 		}
@@ -262,12 +262,12 @@ static void radix_sort(void *array, void *array_buf,
 			counters[i] += counters[i-1];
 		}
 
-		for (i = (num - 1) * size; i >= 0; i -= size) {
-			buf_num = get_num(array + i);
+		for (i = (num - 1); i >= 0; i --) {
+			buf_num = get_num(array, i);
 			addr = get4bits(buf_num, shift);
 			counters[addr]--;
 			new_addr = counters[addr];
-			copy_cell(array_buf + (new_addr*size), array + i);
+			copy_cell(array_buf, new_addr, array, i);
 		}
 
 		shift += RADIX_BASE;
@@ -281,8 +281,8 @@ static void radix_sort(void *array, void *array_buf,
 		 */
 		memset(counters, 0, sizeof(counters));
 
-		for (i = 0; i < num*size; i += size) {
-			buf_num = get_num(array_buf + i);
+		for (i = 0; i < num; i ++) {
+			buf_num = get_num(array_buf, i);
 			addr = get4bits(buf_num, shift);
 			counters[addr]++;
 		}
@@ -291,12 +291,12 @@ static void radix_sort(void *array, void *array_buf,
 			counters[i] += counters[i-1];
 		}
 
-		for (i = (num - 1) * size; i >= 0; i -= size) {
-			buf_num = get_num(array_buf + i);
+		for (i = (num - 1); i >= 0; i--) {
+			buf_num = get_num(array_buf, i);
 			addr = get4bits(buf_num, shift);
 			counters[addr]--;
 			new_addr = counters[addr];
-			copy_cell(array + (new_addr*size), array_buf + i);
+			copy_cell(array, new_addr, array_buf, i);
 		}
 
 		shift += RADIX_BASE;
@@ -380,8 +380,7 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 #else
 	max_cell.count = MAX_SAMPLE_SIZE;
 	radix_sort(ws->bucket, ws->bucket_tmp,
-		   ws->bucket_size, sizeof(*bucket),
-		   &max_cell,
+		   ws->bucket_size, &max_cell,
 		   get_num, copy_cell, get4bits);
 #endif
 
@@ -428,8 +427,7 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 #else
 	max_cell.count = MAX_SAMPLE_SIZE;
 	radix_sort(ws->bucket, ws->bucket_tmp,
-		   ws->bucket_size, sizeof(*bucket),
-		   &max_cell,
+		   ws->bucket_size, &max_cell,
 		   get_num, copy_cell, get4bits);
 #endif
 	/*
