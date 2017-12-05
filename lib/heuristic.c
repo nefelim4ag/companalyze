@@ -213,7 +213,6 @@ static inline uint64_t get_num(const void *a, int i)
 
 static void radix_sort(void *array, void *array_buf,
 		       int num,
-		       const void *max_cell,
 		       uint64_t (*get_num)(const void *, int i),
 		       void (*copy_cell)(void *dest, int dest_i,
 					 void* src, int src_i),
@@ -233,17 +232,12 @@ static void radix_sort(void *array, void *array_buf,
 	 * For small numbers stored in big counters
 	 * example: 48 33 4 ... in 64bit array
 	 */
-	if (!max_cell) {
-		max_num = get_num(array, 0);
-		for (i = 1; i < num; i++) {
-			buf_num = get_num(array, i);
-			if (buf_num > max_num)
-				max_num = buf_num;
-		}
-	} else {
-		max_num = get_num(max_cell, 0);
+	max_num = get_num(array, 0);
+	for (i = 1; i < num; i++) {
+		buf_num = get_num(array, i);
+		if (buf_num > max_num)
+			max_num = buf_num;
 	}
-
 
 	buf_num = ilog2(max_num);
 	bitlen = ALIGN_UP(buf_num, RADIX_BASE*2);
@@ -304,45 +298,6 @@ static void radix_sort(void *array, void *array_buf,
 }
 #endif
 
-#if (0)
-static void bucket_radix_sort(const struct heuristic_ws *ws)
-{
-	uint16_t max_num = 0;
-	uint16_t counters[COUNTERS_SIZE];
-	uint8_t addr, new_addr, bitlen;
-	int i, shift;
-
-	for (i = 0; i < BUCKET_SIZE; i++) {
-		if (ws->bucket[i].count > max_num)
-			max_num = ws->bucket[i].count;
-	}
-
-	max_num = ilog2(max_num);
-	bitlen = ALIGN_UP(max_num, 4);
-
-	for (shift = 0; shift < bitlen; shift += 4) {
-		memset(counters, 0, sizeof(counters));
-
-		for (i = 0; i < BUCKET_SIZE; i++) {
-			addr = get4bits(ws->bucket[i].count, shift);
-			counters[addr]++;
-		}
-
-		for (i = 1; i < COUNTERS_SIZE; i++) {
-			counters[i] += counters[i-1];
-		}
-
-		for (i = BUCKET_SIZE - 1; i >= 0; i--) {
-			addr = get4bits(ws->bucket[i].count, shift);
-			counters[addr]--;
-			new_addr = counters[addr];
-			ws->bucket_tmp[new_addr] = ws->bucket[i];
-		}
-		memcpy(ws->bucket, ws->bucket_tmp, BUCKET_SIZE*sizeof(*ws->bucket));
-	}
-}
-#endif
-
 /*
  * Byte Core set size
  * How many bytes use 90% of sample
@@ -372,15 +327,13 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	uint32_t coreset_end;
 	struct bucket_item *bucket = ws->bucket;
-	struct bucket_item max_cell;
 
 	/* Sort in reverse order */
 #if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
-	max_cell.count = MAX_SAMPLE_SIZE;
 	radix_sort(ws->bucket, ws->bucket_tmp,
-		   ws->bucket_size, &max_cell,
+		   ws->bucket_size,
 		   get_num, copy_cell, get4bits);
 #endif
 
@@ -419,15 +372,13 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 	uint32_t coreset_sum = 0;
 	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	struct bucket_item *bucket = ws->bucket;
-	struct bucket_item max_cell;
 
 	/* Sort in reverse order */
 #if (USE_HEAP_SORT)
 	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
 #else
-	max_cell.count = MAX_SAMPLE_SIZE;
 	radix_sort(ws->bucket, ws->bucket_tmp,
-		   ws->bucket_size, &max_cell,
+		   ws->bucket_size,
 		   get_num, copy_cell, get4bits);
 #endif
 	/*
