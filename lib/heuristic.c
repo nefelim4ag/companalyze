@@ -81,44 +81,29 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 /* Ex. of ilog2 */
 static int ilog2(uint64_t v)
 {
-	int l = 0;
+	int l;
+	if ((1UL << 32) < v) {
+		if ((1UL << 48) < v)
+			l = 48;
+		else
+			l = 32;
+	} else {
+		if ((1UL << 16) < v)
+			l = 16;
+		else
+			l = 0;
+	}
 	while ((1UL << l) < v)
 		l++;
 	return l;
 }
-
-const int tab64[64] = {
-    63,  0, 58,  1, 59, 47, 53,  2,
-    60, 39, 48, 27, 54, 33, 42,  3,
-    61, 51, 37, 40, 49, 18, 28, 20,
-    55, 30, 34, 11, 43, 14, 22,  4,
-    62, 57, 46, 52, 38, 26, 32, 41,
-    50, 36, 17, 19, 29, 10, 13, 21,
-    56, 45, 25, 31, 35, 16,  9, 12,
-    44, 24, 15,  8, 23,  7,  6,  5};
-
-int ilog2_64 (uint64_t value)
-{
-    value |= value >> 1;
-    value |= value >> 2;
-    value |= value >> 4;
-    value |= value >> 8;
-    value |= value >> 16;
-    value |= value >> 32;
-    return tab64[((uint64_t)((value - (value >> 1))*0x07EDD5E59A4E28C2)) >> 58];
-}
-
 
 #define ENTROPY_LVL_ACEPTABLE 70
 #define ENTROPY_LVL_HIGH 85
 
 static uint32_t ilog2_w(uint64_t num)
 {
-#if (0)
 	return ilog2(num*num*num*num);
-#else
-	return ilog2_64(num*num*num*num);
-#endif
 }
 
 static uint32_t shannon_entropy(struct heuristic_ws *ws)
