@@ -8,7 +8,7 @@ lib: ## Build libs
 companalyze.o: companalyze.c
 	$(CC) $(CFLAGS) -c $? -o $@
 
-companalyze.out: companalyze.o lib/heuristic.o lib/sort.o
+companalyze.out: companalyze.o lib/heuristic.o
 	$(CC) $(CFLAGS) -o $@ $?
 
 clean: ## Cleanup

@@ -55,5 +55,4 @@ struct heuristic_ws {
 	uint32_t bucket_size;
 };
 
-void heuristic_stats(void *addr, long unsigned byte_size);
-void heuristic(void *addr, long unsigned byte_size);
+void heuristic(void *addr, long unsigned byte_size, int stats_mode);

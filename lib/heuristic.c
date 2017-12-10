@@ -5,7 +5,6 @@
 /* For float log2() */
 #include <math.h>
 
-#include "sort.h"
 #include "heuristic.h"
 
 int enable_stats_printf;
@@ -528,37 +527,6 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 	}
 }
 
-void heuristic_stats(void *addr, long unsigned byte_size)
-{
-	uint64_t i;
-	uint8_t *in_data = (uint8_t *) addr;
-	struct heuristic_ws workspace;
-	long unsigned chunks = byte_size / BTRFS_MAX_UNCOMPRESSED;
-	long unsigned tail   = byte_size % BTRFS_MAX_UNCOMPRESSED;
-
-	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
-	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE*2, sizeof(*workspace.bucket));
-	workspace.bucket_tmp = &workspace.bucket[BUCKET_SIZE];
-
-	for (i = 0; i < chunks; i++) {
-		if (enable_stats_printf) {
-			printf("%5lu. ", i);
-		}
-		__heuristic_stats(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
-		in_data += BTRFS_MAX_UNCOMPRESSED;
-	}
-
-	if (tail) {
-		if (enable_stats_printf) {
-			printf("%5lu. ", i);
-		}
-		__heuristic_stats(in_data, tail, &workspace);
-	}
-
-	free(workspace.sample);
-	free(workspace.bucket);
-}
-
 static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic_ws *workspace)
 {
 	long unsigned i, curr_sample_pos;
@@ -629,7 +597,7 @@ out:
 	}
 }
 
-void heuristic(void *addr, long unsigned byte_size)
+void heuristic(void *addr, long unsigned byte_size, int stats_mode)
 {
 	uint64_t i;
 	uint8_t *in_data = (uint8_t *) addr;
@@ -638,14 +606,18 @@ void heuristic(void *addr, long unsigned byte_size)
 	long unsigned tail   = byte_size % BTRFS_MAX_UNCOMPRESSED;
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
-	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE*2, sizeof(*workspace.bucket));
-	workspace.bucket_tmp = &workspace.bucket[BUCKET_SIZE];
+	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
 
 	for (i = 0; i < chunks; i++) {
 		if (enable_stats_printf) {
 			printf("%5lu. ", i);
 		}
-		__heuristic(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
+		if (stats_mode) {
+			__heuristic_stats(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
+		} else {
+			__heuristic(in_data, BTRFS_MAX_UNCOMPRESSED, &workspace);
+		}
 		in_data += BTRFS_MAX_UNCOMPRESSED;
 	}
 
@@ -653,7 +625,11 @@ void heuristic(void *addr, long unsigned byte_size)
 		if (enable_stats_printf) {
 			printf("%5lu. ", i);
 		}
-		__heuristic(in_data, tail, &workspace);
+		if (stats_mode) {
+			__heuristic_stats(in_data, tail, &workspace);
+		} else {
+			__heuristic(in_data, tail, &workspace);
+		}
 	}
 
 	free(workspace.sample);
