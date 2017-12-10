@@ -7,8 +7,6 @@
 
 #include "heuristic.h"
 
-int enable_stats_printf;
-
 #if (0)
 /* I think that not working as expected */
 /* Pair distance from random distribution */
@@ -504,7 +502,7 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 		}
 	}
 
-	if (enable_stats_printf) {
+	if (workspace->stats_printf) {
 		printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u|%3u ~%3.1f%%, RndDist: %5u, out: %i\n",
 			byte_size, reppat, byte_set, byte_core_set, shannon_e_i, shannon_e_f, error, rnd_distribution_dist, ret);
 	}
@@ -574,13 +572,13 @@ static void __heuristic(uint8_t *addr, long unsigned byte_size, struct heuristic
 	}
 
 out:
-	if (enable_stats_printf) {
+	if (workspace->stats_printf) {
 		printf("BSize: %6lu, RepPattern: %i, BSet: %3u, BCSet: %3u, ShanEi%%:%3u, out: %i\n",
 			byte_size, reppat, byte_set, byte_core_set, shannon_e_i, ret);
 	}
 }
 
-void heuristic(void *addr, long unsigned byte_size, int stats_mode)
+void heuristic(void *addr, long unsigned byte_size, int stats_mode, int stats_printf)
 {
 	uint64_t i;
 	uint8_t *in_data = (uint8_t *) addr;
@@ -591,9 +589,10 @@ void heuristic(void *addr, long unsigned byte_size, int stats_mode)
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
 	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
 	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+	workspace.stats_printf = stats_printf;
 
 	for (i = 0; i < chunks; i++) {
-		if (enable_stats_printf) {
+		if (stats_printf) {
 			printf("%5lu. ", i);
 		}
 		if (stats_mode) {
@@ -605,7 +604,7 @@ void heuristic(void *addr, long unsigned byte_size, int stats_mode)
 	}
 
 	if (tail) {
-		if (enable_stats_printf) {
+		if (stats_printf) {
 			printf("%5lu. ", i);
 		}
 		if (stats_mode) {

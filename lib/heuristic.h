@@ -1,7 +1,5 @@
 #include <stdint.h>
 
-extern int enable_stats_printf;
-
 /*
  * Btrfs compression restriction
  */
@@ -53,6 +51,7 @@ struct heuristic_ws {
 	struct bucket_item *bucket;
 	struct bucket_item *bucket_tmp;
 	uint32_t bucket_size;
+	int stats_printf;
 };
 
-void heuristic(void *addr, long unsigned byte_size, int stats_mode);
+void heuristic(void *addr, long unsigned byte_size, int stats_mode, int stats_printf);

@@ -15,8 +15,6 @@
 #define MMAP_PROT (PROT_READ|PROT_NONE)
 #define MMAP_FLAG (MAP_SHARED|MAP_NORESERVE)
 
-extern int enable_stats_printf;
-
 void show_help() {
 	printf("Usage: companalyze -Ps -f <file>\n");
 	printf("\t-P\t--printf-stats\t- print stats per 128KiB input data\n");
@@ -34,6 +32,7 @@ int main(int argc, char *argv[]) {
 
 	static char file_path[4*1024];
 
+	int stats_printf = 0;
 	int stats_mode = 0;
 
 
@@ -55,7 +54,7 @@ int main(int argc, char *argv[]) {
 
 		switch (c) {
 			case 'P':
-				enable_stats_printf = 1;
+				stats_printf = 1;
 				break;
 			case 's':
 				stats_mode = 1;
@@ -70,6 +69,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	printf("Test %i\n", stats_printf);
+
 	fd = open(file_path, O_RDONLY);
 	if (fd == -1) {
 		printf("Can't open file: %s\n", argv[1]);
@@ -83,9 +84,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	addr = mmap (0, file_size, MMAP_PROT, MMAP_FLAG, fd, 0);
-	enable_stats_printf = 0;
 	start = clock()*1000000/CLOCKS_PER_SEC;
-	heuristic(addr, file_size, stats_mode);
+	heuristic(addr, file_size, stats_mode, stats_printf);
 	end = clock()*1000000/CLOCKS_PER_SEC;
 
 	munmap(addr, file_size);
