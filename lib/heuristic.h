@@ -49,7 +49,7 @@ struct heuristic_ws {
 	uint32_t sample_size;
 	/* Bucket store counter for each byte type */
 	struct bucket_item *bucket;
-	struct bucket_item *bucket_tmp;
+	struct bucket_item *bucket_b;
 	uint32_t bucket_size;
 	int stats_printf;
 };

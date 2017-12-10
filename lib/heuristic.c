@@ -53,29 +53,6 @@ static uint32_t random_distribution_distance(struct heuristic_ws *ws, uint32_t c
 }
 #endif
 
-/*
- * Shannon Entropy calculation
- *
- * Pure byte distribution analyze fail to determine
- * compressiability of data. Try calculate entropy to
- * estimate the average minimum number of bits needed
- * to encode a sample data.
- *
- * For comfort, use return of percentage of needed bit's,
- * instead of bit's amaount directly.
- *
- * In theory if heuristic hit that check,
- * then heuristic returns OK only compression,
- * with Huffman coding
- *
- * @ENTROPY_LVL_ACEPTABLE - below that threshold sample has low byte
- * entropy and can be compressible with high probability
- *
- * @ENTROPY_LVL_HIGH - data are not compressible with high probability,
- * if that not possible to get additional analyze, use that threshold
- * to restrict compression of data.
- */
-
 /* Ex. of ilog2 */
 static int ilog2(uint64_t v)
 {
@@ -96,26 +73,54 @@ static int ilog2(uint64_t v)
 	return l;
 }
 
-#define ENTROPY_LVL_ACEPTABLE 70
-#define ENTROPY_LVL_HIGH 85
 
-static uint32_t ilog2_w(uint64_t num)
+/*
+ * Shannon Entropy calculation
+ *
+ * Pure byte distribution analysis fails to determine compressiability of data.
+ * Try calculating entropy to estimate the average minimum number of bits
+ * needed to encode the sampled data.
+ *
+ * For convenience, return the percentage of needed bits, instead of amount of
+ * bits directly.
+ *
+ * @ENTROPY_LVL_ACEPTABLE - below that threshold, sample has low byte entropy
+ *			    and can be compressible with high probability
+ *
+ * @ENTROPY_LVL_HIGH - data are not compressible with high probability
+ *
+ * Use of ilog2() decreases precision, we lower the LVL to 5 to compensate.
+ */
+#define ENTROPY_LVL_ACEPTABLE		(65)
+#define ENTROPY_LVL_HIGH		(80)
+
+/*
+ * For increasead precision in shannon_entropy calculation,
+ * let's do pow(n, M) to save more digits after comma:
+ *
+ * - maximum int bit length is 64
+ * - ilog2(MAX_SAMPLE_SIZE)	-> 13
+ * - 13 * 4 = 52 < 64		-> M = 4
+ *
+ * So use pow(n, 4).
+ */
+static inline uint32_t ilog2_w(uint64_t n)
 {
-	return ilog2(num*num*num*num);
+	return ilog2(n * n * n * n);
 }
 
 static uint32_t shannon_entropy(struct heuristic_ws *ws)
 {
-	const uint32_t entropy_max = 8*ilog2_w(2);
+	const uint32_t entropy_max = 8 * ilog2_w(2);
 	uint32_t entropy_sum = 0;
 	uint32_t p, p_base, sz_base;
 	uint32_t i;
 
 	sz_base = ilog2_w(ws->sample_size);
-	for (i = 0; i < ws->bucket_size; i++) {
+	for (i = 0; i < BUCKET_SIZE && ws->bucket[i].count > 0; i++) {
 		p = ws->bucket[i].count;
 		p_base = ilog2_w(p);
-		entropy_sum += p*(sz_base-p_base);
+		entropy_sum += p * (sz_base - p_base);
 	}
 
 	entropy_sum /= ws->sample_size;
@@ -269,49 +274,34 @@ static void radix_sort(void *array, void *array_buf,
 }
 
 /*
- * Byte Core set size
- * How many bytes use 90% of sample
+ * Size of the core byte set - how many bytes cover 90% of the sample
  *
- * Several type of structure d binary data have in general
- * nearly all types of bytes, but distribution can be Uniform
- * where in bucket all byte types will have the nearly same count
- * (ex. Encrypted data)
- * and as ex. Normal (Gaussian), where count of bytes will be not so linear
- * in that case data can be compressible, probably compressible, and
- * not compressible, so assume:
+ * There are several types of structured binary data that use nearly all byte
+ * values. The distribution can be uniform and counts in all buckets will be
+ * nearly the same (eg. encrypted data). Unlikely to be compressible.
  *
- * @BYTE_CORE_SET_LOW - main part of byte types repeated frequently
- *		      compression algo can easy fix that
- * @BYTE_CORE_SET_HIGH - data have Uniform distribution and with high
- *		       probability not compressible
+ * Other possibility is normal (Gaussian) distribution, where the data could
+ * be potentially compressible, but we have to take a few more steps to decide
+ * how much.
  *
+ * @BYTE_CORE_SET_LOW  - main part of byte values repeated frequently,
+ *                       compression algo can easy fix that
+ * @BYTE_CORE_SET_HIGH - data have uniform distribution and with high
+ *                       probability is not compressible
  */
-
-#define BYTE_CORE_SET_LOW  64
-#define BYTE_CORE_SET_HIGH 200
+#define BYTE_CORE_SET_LOW		(64)
+#define BYTE_CORE_SET_HIGH		(200)
 
 static int byte_core_set_size(struct heuristic_ws *ws)
 {
 	uint32_t i;
 	uint32_t coreset_sum = 0;
-	uint32_t core_set_threshold = ws->sample_size * 90 / 100;
-	uint32_t coreset_end;
+	const uint32_t core_set_threshold = ws->sample_size * 90 / 100;
 	struct bucket_item *bucket = ws->bucket;
 
 	/* Sort in reverse order */
-	radix_sort(ws->bucket, ws->bucket_tmp,
-		   ws->bucket_size,
-		   get_num, copy_cell, get4bits);
-
-	/*
-	 * Pre find end of bucket items
-	 */
-	while (ws->bucket_size >= 0) {
-		ws->bucket_size--;
-		i = ws->bucket_size;
-		if (bucket[i].count != 0)
-			break;
-	}
+	radix_sort(ws->bucket, ws->bucket_b, BUCKET_SIZE, get_num,
+			copy_cell, get4bits);
 
 	for (i = 0; i < BYTE_CORE_SET_LOW; i++)
 		coreset_sum += bucket[i].count;
@@ -319,11 +309,7 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	if (coreset_sum > core_set_threshold)
 		return i;
 
-	coreset_end = BYTE_CORE_SET_HIGH;
-	if (coreset_end > ws->bucket_size)
-		coreset_end = ws->bucket_size;
-
-	for (; i < coreset_end; i++) {
+	for (; i < BYTE_CORE_SET_HIGH && bucket[i].count > 0; i++) {
 		coreset_sum += bucket[i].count;
 		if (coreset_sum > core_set_threshold)
 			break;
@@ -331,6 +317,7 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 
 	return i;
 }
+
 
 static int byte_core_set_size_stats(struct heuristic_ws *ws)
 {
@@ -340,20 +327,10 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 	struct bucket_item *bucket = ws->bucket;
 
 	/* Sort in reverse order */
-	radix_sort(ws->bucket, ws->bucket_tmp,
-		   ws->bucket_size,
-		   get_num, copy_cell, get4bits);
-	/*
-	 * Pre find end of bucket items
-	 */
-	while (ws->bucket_size >= 0) {
-		ws->bucket_size--;
-		i = ws->bucket_size;
-		if (bucket[i].count != 0)
-			break;
-	}
+	radix_sort(ws->bucket, ws->bucket_b, BUCKET_SIZE, get_num,
+			copy_cell, get4bits);
 
-	for (i = 0; i < ws->bucket_size; i++) {
+	for (i = 0; i < BUCKET_SIZE && bucket[i].count > 0; i++) {
 		coreset_sum += bucket[i].count;
 		if (coreset_sum > core_set_threshold) {
 			i++;
@@ -461,14 +438,13 @@ static void __heuristic_stats(uint8_t *addr, long unsigned byte_size, struct heu
 
 	workspace->bucket_size = BUCKET_SIZE;
 
-#if (1)
 	byte_core_set = byte_core_set_size_stats(workspace);
 	if (byte_core_set <= BYTE_CORE_SET_LOW && ret == 0)
 		ret = 3;
 
 	if (byte_core_set >= BYTE_CORE_SET_HIGH && ret == 0)
 		ret = -3;
-#endif
+
 	shannon_e_i = shannon_entropy(workspace);
 #if(0)
 	shannon_e_f = shannon_f(workspace);
@@ -588,7 +564,7 @@ void heuristic(void *addr, long unsigned byte_size, int stats_mode, int stats_pr
 
 	workspace.sample = (uint8_t *) malloc(MAX_SAMPLE_SIZE);
 	workspace.bucket = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
-	workspace.bucket_tmp = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
+	workspace.bucket_b = (struct bucket_item *) calloc(BUCKET_SIZE, sizeof(*workspace.bucket));
 	workspace.stats_printf = stats_printf;
 
 	for (i = 0; i < chunks; i++) {
@@ -616,5 +592,5 @@ void heuristic(void *addr, long unsigned byte_size, int stats_mode, int stats_pr
 
 	free(workspace.sample);
 	free(workspace.bucket);
-	free(workspace.bucket_tmp);
+	free(workspace.bucket_b);
 }
