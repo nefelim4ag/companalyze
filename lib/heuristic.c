@@ -145,7 +145,6 @@ static uint32_t shannon_f(struct heuristic_ws *ws) {
 #define RADIX_BASE 4
 #define COUNTERS_SIZE (1 << RADIX_BASE)
 
-#if (!USE_HEAP_SORT)
 static inline uint8_t get4bits(uint64_t num, int shift) {
 	uint8_t low4bits;
 	num = num >> shift;
@@ -270,7 +269,6 @@ static void radix_sort(void *array, void *array_buf,
 		shift += RADIX_BASE;
 	}
 }
-#endif
 
 /*
  * Byte Core set size
