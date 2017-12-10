@@ -69,8 +69,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	printf("Test %i\n", stats_printf);
-
 	fd = open(file_path, O_RDONLY);
 	if (fd == -1) {
 		printf("Can't open file: %s\n", argv[1]);
