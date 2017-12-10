@@ -616,4 +616,5 @@ void heuristic(void *addr, long unsigned byte_size, int stats_mode, int stats_pr
 
 	free(workspace.sample);
 	free(workspace.bucket);
+	free(workspace.bucket_tmp);
 }
