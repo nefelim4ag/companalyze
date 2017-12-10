@@ -156,18 +156,8 @@ static uint32_t shannon_f(struct heuristic_ws *ws) {
 }
 #endif
 
-/* Compare buckets by size, ascending */
-static inline int bucket_comp_rev(const void *lv, const void *rv)
-{
-	const struct bucket_item *l = (struct bucket_item *)(lv);
-	const struct bucket_item *r = (struct bucket_item *)(rv);
+#define ALIGN(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
 
-	return r->count - l->count;
-}
-
-#define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
-
-#define USE_HEAP_SORT 1
 #define RADIX_BASE 4
 #define COUNTERS_SIZE (1 << RADIX_BASE)
 
@@ -240,7 +230,7 @@ static void radix_sort(void *array, void *array_buf,
 	}
 
 	buf_num = ilog2(max_num);
-	bitlen = ALIGN_UP(buf_num, RADIX_BASE*2);
+	bitlen = ALIGN(buf_num, RADIX_BASE*2);
 
 	shift = 0;
 	while (shift < bitlen) {
@@ -329,13 +319,9 @@ static int byte_core_set_size(struct heuristic_ws *ws)
 	struct bucket_item *bucket = ws->bucket;
 
 	/* Sort in reverse order */
-#if (USE_HEAP_SORT)
-	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
-#else
 	radix_sort(ws->bucket, ws->bucket_tmp,
 		   ws->bucket_size,
 		   get_num, copy_cell, get4bits);
-#endif
 
 	/*
 	 * Pre find end of bucket items
@@ -374,13 +360,9 @@ static int byte_core_set_size_stats(struct heuristic_ws *ws)
 	struct bucket_item *bucket = ws->bucket;
 
 	/* Sort in reverse order */
-#if (USE_HEAP_SORT)
-	sort(bucket, ws->bucket_size, sizeof(*bucket), &bucket_comp_rev, NULL);
-#else
 	radix_sort(ws->bucket, ws->bucket_tmp,
 		   ws->bucket_size,
 		   get_num, copy_cell, get4bits);
-#endif
 	/*
 	 * Pre find end of bucket items
 	 */
