@@ -1,15 +1,17 @@
 CFLAGS ?= -O2 -Wall -lm
 
-default all: lib companalyze.out
+objects := companalyze.o lib/heuristic.o
 
-lib: ## Build libs
-	$(MAKE) -C lib
+default all: companalyze.out
 
-companalyze.o: companalyze.c
-	$(CC) $(CFLAGS) -c $? -o $@
+lib/heuristic.o: lib/heuristic.c  lib/heuristic.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
-companalyze.out: companalyze.o lib/heuristic.o
-	$(CC) $(CFLAGS) -o $@ $?
+companalyze.o: companalyze.c lib/heuristic.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+companalyze.out: $(objects)
+	$(CC) $(CFLAGS) -o $@ $^
 
 clean: ## Cleanup
 	git clean -dfx
