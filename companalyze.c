@@ -69,6 +69,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (file_path[0] == 0) {
+		printf("No file given, see --help\n");
+		return -1;
+	}
+
 	fd = open(file_path, O_RDONLY);
 	if (fd == -1) {
 		printf("Can't open file: %s\n", argv[1]);
